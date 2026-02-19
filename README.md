@@ -43,7 +43,9 @@ the best practical approach is:
 
 This avoids mandatory training while preserving specialist quality.
 
-## Implemented module
+## Implemented modules
+
+### A) Multi-expert dynamic wrapper (no retraining required)
 
 File: `dynamic_router.py`
 
@@ -54,13 +56,27 @@ Main classes:
 - `ClassifierOutput`: label/confidence interface from your classifier.
 - `FirstSuccessfulSelector`, `HeuristicQualitySelector`: candidate selection.
 
-## Config format
+### B) Adapter routing on one base model
 
-See `router_config.example.json`.
+File: `adapter_router.py`
+
+Main classes:
+- `DynamicAdapterRoutedLLM`: single `generate()` entrypoint for base+LoRA adapters.
+- `AdapterRoutingPolicy`: dynamic task->adapters mapping.
+- `AdapterSpec`: adapter metadata and generation defaults.
+- `ClassifierOutput`: label/confidence interface.
+
+## Config formats
+
+See:
+- `router_config.example.json` (multi-expert wrapper)
+- `adapter_router_config.example.json` (single base + adapters)
 
 - Add/remove experts without code changes.
 - Change task ownership/ranking per task in policy.
 - Configure confidence threshold and low-confidence mode.
+
+For adapter routing, you can also add/remove adapters by config only.
 
 ## Usage example
 
