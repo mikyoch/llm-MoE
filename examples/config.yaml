@@ -8,7 +8,7 @@ unified_llm:
 
 router:
   type: dummy_classifier
-  dummy_model_path: "examples/dummy_classifier_model.json"
+  dummy_model_path: "dummy_classifier_model.json"
   dummy_num_experts_hint: 3
   confidence_threshold: 0.0
 

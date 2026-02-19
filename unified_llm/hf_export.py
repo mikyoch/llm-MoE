@@ -157,9 +157,12 @@ def export_hf_router_artifact(
 
     # Normalize dummy classifier path for artifact-local usage.
     if cfg.router.type == "dummy_classifier" and cfg.router.dummy_model_path:
+        config_dir = Path(router_config_path).resolve().parent
         src = Path(cfg.router.dummy_model_path)
         if not src.is_absolute():
-            src = (Path(router_config_path).parent / src).resolve()
+            config_relative = (config_dir / src).resolve()
+            cwd_relative = src.resolve()
+            src = config_relative if config_relative.exists() else cwd_relative
         if src.exists():
             shutil.copy2(src, out / "dummy_classifier_model.json")
             raw_router_cfg.setdefault("router", {})

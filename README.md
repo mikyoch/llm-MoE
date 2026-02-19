@@ -108,7 +108,7 @@ Current default config already uses it:
 ```yaml
 router:
   type: dummy_classifier
-  dummy_model_path: "examples/dummy_classifier_model.json"
+  dummy_model_path: "dummy_classifier_model.json"
 ```
 
 Expert mapping is configured by `expert.index` (fallback is list order).

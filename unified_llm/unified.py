@@ -99,10 +99,10 @@ class UnifiedRouterLLM:
     ) -> "UnifiedRouterLLM":
         config = load_config(config_path)
         config_dir = Path(config_path).resolve().parent
-        if config.router.dummy_model_path and not Path(config.router.dummy_model_path).is_absolute():
-            config.router.dummy_model_path = str((config_dir / config.router.dummy_model_path).resolve())
-        if config.router.local_model and not Path(config.router.local_model).is_absolute():
-            config.router.local_model = str((config_dir / config.router.local_model).resolve())
+        if config.router.dummy_model_path:
+            config.router.dummy_model_path = cls._resolve_reference_path(config.router.dummy_model_path, config_dir)
+        if config.router.local_model:
+            config.router.local_model = cls._resolve_reference_path(config.router.local_model, config_dir)
         setup_logging(config.unified_llm.logging)
         set_global_seed(config.unified_llm.seed)
 
@@ -122,6 +122,19 @@ class UnifiedRouterLLM:
         else:
             judge = HeuristicJudge()
         return cls(config=config, router=router, expert_pool=expert_pool, judge=judge)
+
+    @staticmethod
+    def _resolve_reference_path(raw_path: str, config_dir: Path) -> str:
+        path_obj = Path(raw_path)
+        if path_obj.is_absolute():
+            return str(path_obj)
+        config_relative = (config_dir / path_obj).resolve()
+        if config_relative.exists():
+            return str(config_relative)
+        cwd_relative = path_obj.resolve()
+        if cwd_relative.exists():
+            return str(cwd_relative)
+        return str(config_relative)
 
     def generate(
         self,
