@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import sys
 import tempfile
 from pathlib import Path
 
 from huggingface_hub import HfApi
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from unified_llm.hf_export import export_hf_router_artifact
 
