@@ -1,0 +1,51 @@
+{
+  "experts": [
+    {
+      "expert_id": "expert_ac",
+      "model_path": "/models/expert_ac",
+      "tokenizer_path": "/models/tokenizer_ac",
+      "supported_tasks": ["A", "C"],
+      "generation_defaults": {
+        "max_new_tokens": 256,
+        "temperature": 0.2,
+        "do_sample": true
+      }
+    },
+    {
+      "expert_id": "expert_bd",
+      "model_path": "/models/expert_bd",
+      "tokenizer_path": "/models/tokenizer_bd",
+      "supported_tasks": ["B", "D"],
+      "generation_defaults": {
+        "max_new_tokens": 256,
+        "temperature": 0.2,
+        "do_sample": true
+      }
+    },
+    {
+      "expert_id": "expert_ef",
+      "model_path": "/models/expert_ef",
+      "tokenizer_path": "/models/tokenizer_ef",
+      "supported_tasks": ["E", "F"],
+      "generation_defaults": {
+        "max_new_tokens": 256,
+        "temperature": 0.2,
+        "do_sample": true
+      }
+    }
+  ],
+  "policy": {
+    "task_to_experts": {
+      "A": ["expert_ac", "expert_bd"],
+      "B": ["expert_bd", "expert_ac"],
+      "C": ["expert_ac", "expert_ef"],
+      "D": ["expert_bd", "expert_ef"],
+      "E": ["expert_ef", "expert_ac"],
+      "F": ["expert_ef", "expert_bd"]
+    },
+    "fallback_experts": ["expert_ac"],
+    "confidence_threshold": 0.98,
+    "low_confidence_mode": "parallel",
+    "max_parallel_experts": 2
+  }
+}
