@@ -52,3 +52,17 @@ def test_invalid_duplicate_expert_name() -> None:
     }
     with pytest.raises(ValueError, match="Duplicate expert"):
         AppConfig.from_dict(raw)
+
+
+def test_dummy_classifier_router_config_is_valid() -> None:
+    raw = {
+        "unified_llm": {"mode": "route_top1", "max_parallel": 1},
+        "router": {"type": "dummy_classifier", "dummy_num_experts_hint": 3},
+        "experts": [
+            {"name": "e0", "hf_model_id": "m0", "index": 0},
+            {"name": "e1", "hf_model_id": "m1", "index": 1},
+        ],
+    }
+    cfg = AppConfig.from_dict(raw)
+    assert cfg.router.type == "dummy_classifier"
+    assert cfg.expert_name_by_index()[1] == "e1"

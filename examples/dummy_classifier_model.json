@@ -1,0 +1,19 @@
+{
+  "rules": [
+    {
+      "index": 0,
+      "keywords": ["analysis", "summarize", "overview", "plan"]
+    },
+    {
+      "index": 1,
+      "keywords": ["code", "debug", "stacktrace", "python", "bug"]
+    },
+    {
+      "index": 2,
+      "keywords": ["policy", "compliance", "legal", "safety"]
+    }
+  ],
+  "default_index": 0,
+  "confidence": 1.0,
+  "num_experts_hint": 3
+}

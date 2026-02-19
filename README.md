@@ -23,6 +23,7 @@ models into one deployable runtime package.
 - OpenAI-compatible HTTP endpoints (optional FastAPI server)
 - CLI
 - Structured JSON logging for routing and judge decisions
+- Built-in dummy classifier model backend with integer labels (`0`, `1`, `2`, ...)
 - Optional distillation upgrade path in `distill/`
 
 ## Inference modes
@@ -86,11 +87,31 @@ See `examples/config.yaml`.
 
 Highlights:
 - dynamic experts list
+- integer expert index routing support (`expert.index`)
 - dynamic per-task routing and top-k shortlist overrides
 - judge type (`heuristic_judge` or `llm_judge`)
 - per-task refine chains
 - load strategy (`eager` / `lazy`)
 - per-expert generation defaults
+
+### Dummy classifier model (replace later)
+
+The repository includes a dummy classifier "model" JSON:
+
+- `examples/dummy_classifier_model.json`
+
+It outputs labels as integer strings (`"0"`, `"1"`, `"2"`, ...), where each
+number maps to the best expert index.
+
+Current default config already uses it:
+
+```yaml
+router:
+  type: dummy_classifier
+  dummy_model_path: "examples/dummy_classifier_model.json"
+```
+
+Expert mapping is configured by `expert.index` (fallback is list order).
 
 ## Fallback behavior
 
@@ -106,10 +127,22 @@ Optional scripts are in `distill/`:
 
 ## Push to Hugging Face
 
-- Orchestrator artifact:
-  `python scripts/push_orchestrator_to_hf.py --repo_id org/unified-router-llm --source_dir .`
+- Export HF-style orchestrator artifact locally (Qwen-like repo layout):
+  `python scripts/export_hf_router_artifact.py --router_config examples/config.yaml --output_dir outputs/hf_router`
+- Push orchestrator artifact to HF (exports HF-style package by default):
+  `python scripts/push_orchestrator_to_hf.py --repo_id org/unified-router-llm --router_config examples/config.yaml`
 - Distilled student:
   `python scripts/push_student_to_hf.py --repo_id org/student --model_dir outputs/student`
+
+The exported orchestrator folder contains a Hugging Face style structure:
+
+- `config.json`
+- `generation_config.json`
+- `configuration_unified_router.py`
+- `modeling_unified_router.py`
+- `router_config.yaml`
+- `README.md`
+- optional `dummy_classifier_model.json`
 
 ## Notes
 

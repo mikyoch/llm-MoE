@@ -6,6 +6,7 @@ import importlib
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Optional
 
+from unified_llm.classifier import DummyClassifierModel
 from unified_llm.config import RouterConfig
 
 
@@ -102,7 +103,38 @@ class LocalModelRouter(BaseRouter):
         return decision
 
 
-def build_router(config: RouterConfig, callable_router: Optional[Callable[[str], Any]] = None) -> BaseRouter:
+class DummyClassifierRouter(BaseRouter):
+    """
+    Router backed by a local dummy classifier model JSON.
+    Returns integer labels as strings: "0", "1", ...
+    """
+
+    def __init__(
+        self,
+        model_path: Optional[str],
+        confidence_threshold: float = 0.0,
+        num_experts_hint: int = 1,
+    ) -> None:
+        self.model_path = model_path
+        self.confidence_threshold = confidence_threshold
+        if model_path:
+            self.model = DummyClassifierModel.from_json(model_path, num_experts_hint=num_experts_hint)
+        else:
+            self.model = DummyClassifierModel.default(num_experts_hint=num_experts_hint)
+
+    def route(self, prompt: str) -> RouteDecision:
+        output = self.model.predict(prompt)
+        decision = _normalize_route_output(output)
+        if decision.confidence < self.confidence_threshold:
+            decision.raw["below_threshold"] = True
+        return decision
+
+
+def build_router(
+    config: RouterConfig,
+    callable_router: Optional[Callable[[str], Any]] = None,
+    num_experts_hint: int = 1,
+) -> BaseRouter:
     if config.type == "python_module":
         return PythonModuleRouter(config.python_module or "", confidence_threshold=config.confidence_threshold)
     if config.type == "local_model":
@@ -111,4 +143,11 @@ def build_router(config: RouterConfig, callable_router: Optional[Callable[[str],
         if callable_router is None:
             raise ValueError("callable_router must be provided when router.type=callable")
         return CallableRouter(callable_router, confidence_threshold=config.confidence_threshold)
+    if config.type == "dummy_classifier":
+        hint = int(config.dummy_num_experts_hint or num_experts_hint or 1)
+        return DummyClassifierRouter(
+            model_path=config.dummy_model_path,
+            confidence_threshold=config.confidence_threshold,
+            num_experts_hint=max(1, hint),
+        )
     raise ValueError(f"Unsupported router type: {config.type!r}")

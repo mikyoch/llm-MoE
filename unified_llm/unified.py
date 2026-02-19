@@ -7,6 +7,7 @@ import logging
 import random
 import uuid
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 from unified_llm.config import AppConfig, LoggingConfig, load_config
@@ -97,10 +98,19 @@ class UnifiedRouterLLM:
         router_callable: Optional[Any] = None,
     ) -> "UnifiedRouterLLM":
         config = load_config(config_path)
+        config_dir = Path(config_path).resolve().parent
+        if config.router.dummy_model_path and not Path(config.router.dummy_model_path).is_absolute():
+            config.router.dummy_model_path = str((config_dir / config.router.dummy_model_path).resolve())
+        if config.router.local_model and not Path(config.router.local_model).is_absolute():
+            config.router.local_model = str((config_dir / config.router.local_model).resolve())
         setup_logging(config.unified_llm.logging)
         set_global_seed(config.unified_llm.seed)
 
-        router = build_router(config.router, callable_router=router_callable)
+        router = build_router(
+            config.router,
+            callable_router=router_callable,
+            num_experts_hint=len(config.experts),
+        )
         expert_pool = ExpertPool(config.experts)
         if config.selection.judge.type == "llm_judge":
             judge = LLMJudge(
@@ -446,10 +456,23 @@ class UnifiedRouterLLM:
         )
 
     def _experts_for_label(self, label: str) -> List[str]:
+        # Integer labels (0,1,2,...) are interpreted as expert index routing.
+        idx = self._maybe_parse_index(label)
+        if idx is not None:
+            index_map = self.config.expert_name_by_index()
+            if idx in index_map:
+                return [index_map[idx]]
+
         names = self.expert_pool.experts_for_task(label)
         if not names:
             names = self.expert_pool.all_expert_names()
         return names
+
+    def _maybe_parse_index(self, label: str) -> Optional[int]:
+        stripped = str(label).strip()
+        if stripped.isdigit():
+            return int(stripped)
+        return None
 
     def _find_by_name(self, items: Iterable[ExpertResult], name: str) -> Optional[ExpertResult]:
         for item in items:

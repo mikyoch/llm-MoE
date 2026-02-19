@@ -15,7 +15,7 @@ VALID_MODES = {
     "route_topk_then_judge",
     "cascade_refine",
 }
-VALID_ROUTER_TYPES = {"python_module", "local_model", "callable"}
+VALID_ROUTER_TYPES = {"python_module", "local_model", "callable", "dummy_classifier"}
 VALID_JUDGE_TYPES = {"heuristic_judge", "llm_judge"}
 VALID_LOAD_STRATEGIES = {"eager", "lazy"}
 
@@ -39,6 +39,8 @@ class RouterConfig:
     type: str = "python_module"
     python_module: Optional[str] = None
     local_model: Optional[str] = None
+    dummy_model_path: Optional[str] = None
+    dummy_num_experts_hint: Optional[int] = None
     confidence_threshold: float = 0.0
 
 
@@ -46,6 +48,7 @@ class RouterConfig:
 class ExpertConfig:
     name: str
     hf_model_id: str
+    index: Optional[int] = None
     tasks: List[str] = field(default_factory=list)
     dtype: str = "bfloat16"
     device: str = "auto"
@@ -116,6 +119,8 @@ class AppConfig:
             type=router_raw.get("type", "python_module"),
             python_module=router_raw.get("python_module"),
             local_model=router_raw.get("local_model"),
+            dummy_model_path=router_raw.get("dummy_model_path"),
+            dummy_num_experts_hint=router_raw.get("dummy_num_experts_hint"),
             confidence_threshold=float(router_raw.get("confidence_threshold", 0.0)),
         )
 
@@ -125,6 +130,7 @@ class AppConfig:
                 ExpertConfig(
                     name=item["name"],
                     hf_model_id=item["hf_model_id"],
+                    index=item.get("index"),
                     tasks=list(item.get("tasks", [])),
                     dtype=item.get("dtype", "bfloat16"),
                     device=item.get("device", "auto"),
@@ -180,6 +186,9 @@ class AppConfig:
             raise ValueError("router.python_module is required when router.type=python_module")
         if self.router.type == "local_model" and not self.router.local_model:
             raise ValueError("router.local_model is required when router.type=local_model")
+        if self.router.type == "dummy_classifier":
+            if self.router.dummy_num_experts_hint is not None and int(self.router.dummy_num_experts_hint) < 1:
+                raise ValueError("router.dummy_num_experts_hint must be >= 1 when provided")
         if not (0.0 <= self.router.confidence_threshold <= 1.0):
             raise ValueError("router.confidence_threshold must be between 0.0 and 1.0")
 
@@ -187,10 +196,18 @@ class AppConfig:
             raise ValueError("At least one expert must be configured")
 
         seen = set()
+        seen_indices = set()
         for expert in self.experts:
             if expert.name in seen:
                 raise ValueError(f"Duplicate expert name={expert.name!r}")
             seen.add(expert.name)
+            if expert.index is not None:
+                idx = int(expert.index)
+                if idx < 0:
+                    raise ValueError(f"Expert index must be >= 0 for expert={expert.name!r}")
+                if idx in seen_indices:
+                    raise ValueError(f"Duplicate expert index={idx}")
+                seen_indices.add(idx)
             if expert.load_strategy not in VALID_LOAD_STRATEGIES:
                 raise ValueError(
                     f"Invalid load_strategy for expert={expert.name!r}: {expert.load_strategy!r}. "
@@ -241,6 +258,18 @@ class AppConfig:
         for expert in self.experts:
             for task in expert.tasks:
                 mapping.setdefault(task, []).append(expert.name)
+        return mapping
+
+    def expert_name_by_index(self) -> Dict[int, str]:
+        """
+        Build index->expert mapping.
+        If index is omitted for some experts, fallback to list order index.
+        """
+        mapping: Dict[int, str] = {}
+        for pos, expert in enumerate(self.experts):
+            idx = int(expert.index) if expert.index is not None else pos
+            if idx not in mapping:
+                mapping[idx] = expert.name
         return mapping
 
 

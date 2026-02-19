@@ -7,12 +7,14 @@ unified_llm:
     json: true
 
 router:
-  type: python_module
-  python_module: "examples.router_rules:route"
+  type: dummy_classifier
+  dummy_model_path: "examples/dummy_classifier_model.json"
+  dummy_num_experts_hint: 3
   confidence_threshold: 0.0
 
 experts:
   - name: "llm2"
+    index: 0
     hf_model_id: "mistralai/Mistral-7B-Instruct-v0.3"
     tasks: ["A", "C"]
     dtype: "bfloat16"
@@ -23,12 +25,14 @@ experts:
       top_p: 0.9
       max_new_tokens: 512
   - name: "llm1"
+    index: 1
     hf_model_id: "Qwen/Qwen2.5-7B-Instruct"
     tasks: ["B", "D"]
     dtype: "bfloat16"
     device: "cuda:0"
     load_strategy: "lazy"
   - name: "llm3"
+    index: 2
     hf_model_id: "THUDM/glm-4-9b-chat"
     tasks: ["E", "F"]
     dtype: "bfloat16"
