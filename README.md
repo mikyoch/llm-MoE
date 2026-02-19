@@ -1,125 +1,119 @@
-# llm-MoE
+# UnifiedRouterLLM
 
-Practical routing framework for building a **single runtime, single package**
-from multiple specialist LLMs, including heterogeneous tokenizers.
+Production-grade single-process LLM orchestration for combining many specialist
+models into one deployable runtime package.
 
-## Direct answers to your latest questions
+## Conceptual verdict
 
-### 1) Do you need training data for distillation?
-Yes. Distillation needs prompts at minimum (unlabeled is okay), and usually
-teacher outputs/logits from your specialists.
+- "Run all experts in parallel then select one output using classifier" is valid.
+  Correct term: **gated ensemble with late selection (late fusion)**.
+- True **MoE** routes early so only selected experts execute.
+- With different tokenizers and unrelated architectures, you cannot cleanly
+  merge into one standard shared-tokenizer checkpoint without training/alignment.
+- Under limited training data and quality-first constraints, a **single-process
+  orchestrator** is the best practical primary solution.
 
-- No prompts -> no distillation objective.
-- Better coverage of production tasks -> better distilled quality.
+## What this repository provides
 
-### 2) Can you guarantee distillation performance?
-No strict guarantee. You can reduce risk with evaluation and acceptance gates,
-but distillation can regress on rare capabilities unless your distillation
-data covers those cases.
+- One Python package (`unified_llm`) with one public runtime class:
+  `UnifiedRouterLLM`
+- One process serving model with one generate API
+- Dynamic expert set and task mapping through YAML config only
+- Supports different tokenizers across experts
+- OpenAI-compatible HTTP endpoints (optional FastAPI server)
+- CLI
+- Structured JSON logging for routing and judge decisions
+- Optional distillation upgrade path in `distill/`
 
-### 3) Tokenizers differ across experts. Is that a blocker?
-For a true token-level unified MoE model: usually yes (or very messy).
-For a wrapper/orchestrator that routes full text requests to experts: no.
+## Inference modes
 
-This repo uses the wrapper approach, so each expert can keep its own tokenizer.
+1. `route_top1` (default)
+   - Route by classifier label and execute one expert.
+2. `run_all_select`
+   - Run all experts and judge candidates (quality-first).
+3. `route_topk_then_judge`
+   - Route to shortlist, then judge candidates.
+4. `cascade_refine`
+   - Draft expert + refiner expert, then judge (or always take refined).
 
-## Best approach for your constraints
+## Decision table
 
-Given:
-- minimal retraining preferred,
-- output quality is more important than compute,
-- dynamic number/type of experts and dynamic task ownership,
-- one runtime process and one deployable package required,
+| Strategy | single artifact | single runtime | compute | expected quality | complexity | tokenizer constraints |
+|---|---|---|---|---|---|---|
+| run_all_select (late fusion) | Yes | Yes | High | Very high | Medium | None (text-level) |
+| route_top1 (early routing) | Yes | Yes | Low/Medium | High when router is accurate | Low | None (text-level) |
+| route_topk_then_judge | Yes | Yes | Medium/High | Very high | Medium/High | None (text-level) |
+| cascade_refine | Yes | Yes | High | Maximum potential | High | None (text-level) |
 
-the best practical approach is:
+## Installation
 
-1. **Dynamic gated ensemble wrapper** (this repo):
-   - top-1 route when classifier confidence is high,
-   - parallel candidate execution (top-k) when confidence is lower,
-   - deterministic or heuristic selector picks final output.
-2. Keep your existing task classifier as the routing source.
-3. Maintain task->expert rankings in config and update from offline evals.
-4. Distillation is optional later for cost/latency optimization.
-
-This avoids mandatory training while preserving specialist quality.
-
-## Implemented modules
-
-### A) Multi-expert dynamic wrapper (no retraining required)
-
-File: `dynamic_router.py`
-
-Main classes:
-- `DynamicRoutedLLM`: single `generate()` entrypoint.
-- `RoutingPolicy`: dynamic task->experts mapping and confidence policy.
-- `ExpertRuntime`: one expert model + its own tokenizer.
-- `ClassifierOutput`: label/confidence interface from your classifier.
-- `FirstSuccessfulSelector`, `HeuristicQualitySelector`: candidate selection.
-
-### B) Adapter routing on one base model
-
-File: `adapter_router.py`
-
-Main classes:
-- `DynamicAdapterRoutedLLM`: single `generate()` entrypoint for base+LoRA adapters.
-- `AdapterRoutingPolicy`: dynamic task->adapters mapping.
-- `AdapterSpec`: adapter metadata and generation defaults.
-- `ClassifierOutput`: label/confidence interface.
-
-## Config formats
-
-See:
-- `router_config.example.json` (multi-expert wrapper)
-- `adapter_router_config.example.json` (single base + adapters)
-
-- Add/remove experts without code changes.
-- Change task ownership/ranking per task in policy.
-- Configure confidence threshold and low-confidence mode.
-
-For adapter routing, you can also add/remove adapters by config only.
-
-## Usage example
-
-```python
-from dynamic_router import (
-    ClassifierOutput,
-    DynamicRoutedLLM,
-    HeuristicQualitySelector,
-)
-
-router = DynamicRoutedLLM.from_json_config(
-    path="router_config.example.json",
-    selector=HeuristicQualitySelector(),
-)
-
-clf = ClassifierOutput(label="B", confidence=0.86)
-result = router.generate(
-    prompt="Solve this task...",
-    classifier_output=clf,
-    request_id="req-001",
-    generation_overrides={"max_new_tokens": 300},
-    return_metadata=True,
-)
-
-print(result["selected_expert"])
-print(result["text"])
+```bash
+pip install -e .
+# optional server deps
+pip install -e ".[server]"
 ```
 
-## Deployment notes
+## CLI usage
 
-- This is one runtime process with one application artifact.
-- The package still includes all expert checkpoints (larger memory footprint).
-- Tokenizers can differ safely because each expert handles its own tokenization.
-- If using low-confidence parallel mode, monitor latency and GPU memory.
-- Log routing decisions and confidence to track drift and misroutes.
+```bash
+unified-llm run --config examples/config.yaml --prompt "debug this stacktrace"
+unified-llm run --config examples/config.yaml --prompt "return JSON only" --verbose
+unified-llm serve --config examples/config.yaml --host 0.0.0.0 --port 8000
+```
 
-## Suggested production rollout
+## Python usage
 
-1. Start with `confidence_threshold=0.98`, `low_confidence_mode=parallel`, top-2.
-2. Evaluate on a fixed golden set and compare:
-   - top-1 only,
-   - parallel+selector,
-   - current baseline.
-3. Adjust per-task expert order and threshold from observed quality.
-4. Add fallback experts for new tasks and unknown labels.
-5. Optional later: distill selected behavior to a single student for efficiency.
+```python
+from unified_llm import UnifiedRouterLLM
+
+model = UnifiedRouterLLM.from_config("examples/config.yaml")
+text = model.generate("Solve this task.")
+result = model.generate("Return JSON", return_metadata=True, mode="run_all_select")
+print(result["metadata"]["selected_expert"])
+```
+
+## API usage (OpenAI-compatible)
+
+- `POST /v1/chat/completions`
+- `POST /v1/completions`
+
+The server returns standard choice fields plus optional `metadata` when
+`verbose=true`.
+
+## Config
+
+See `examples/config.yaml`.
+
+Highlights:
+- dynamic experts list
+- dynamic per-task routing and top-k shortlist overrides
+- judge type (`heuristic_judge` or `llm_judge`)
+- per-task refine chains
+- load strategy (`eager` / `lazy`)
+- per-expert generation defaults
+
+## Fallback behavior
+
+If a chosen expert fails in `route_top1`, the system automatically falls back
+to judge-based selection over remaining experts.
+
+## Distillation (optional)
+
+Distillation is not required for main orchestration.
+Optional scripts are in `distill/`:
+- generate teacher pairs from routed ensemble
+- run SFT distillation for a student model checkpoint
+
+## Push to Hugging Face
+
+- Orchestrator artifact:
+  `python scripts/push_orchestrator_to_hf.py --repo_id org/unified-router-llm --source_dir .`
+- Distilled student:
+  `python scripts/push_student_to_hf.py --repo_id org/student --model_dir outputs/student`
+
+## Notes
+
+- Different tokenizers are handled by routing on raw prompt text and letting
+  each expert tokenize independently.
+- This is one runtime process and one deployable product, but memory includes
+  all loaded expert weights.
