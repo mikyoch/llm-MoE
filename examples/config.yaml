@@ -1,0 +1,59 @@
+unified_llm:
+  mode: route_top1
+  max_parallel: 1
+  seed: 1234
+  logging:
+    level: INFO
+    json: true
+
+router:
+  type: dummy_classifier
+  dummy_model_path: "dummy_classifier_model.json"
+  dummy_num_experts_hint: 3
+  confidence_threshold: 0.0
+
+experts:
+  - name: "llm2"
+    index: 0
+    hf_model_id: "mistralai/Mistral-7B-Instruct-v0.3"
+    tasks: ["A", "C"]
+    dtype: "bfloat16"
+    device: "cuda:0"
+    load_strategy: "lazy"
+    gen_defaults:
+      temperature: 0.2
+      top_p: 0.9
+      max_new_tokens: 512
+  - name: "llm1"
+    index: 1
+    hf_model_id: "Qwen/Qwen2.5-7B-Instruct"
+    tasks: ["B", "D"]
+    dtype: "bfloat16"
+    device: "cuda:0"
+    load_strategy: "lazy"
+  - name: "llm3"
+    index: 2
+    hf_model_id: "THUDM/glm-4-9b-chat"
+    tasks: ["E", "F"]
+    dtype: "bfloat16"
+    device: "cuda:1"
+    load_strategy: "lazy"
+
+selection:
+  judge:
+    type: llm_judge
+    llm_judge_expert: "llm2"
+    rubric: "accuracy, instruction_following, safety, format, concision"
+  topk:
+    include_generalist: true
+    generalist_expert: "llm2"
+    per_task:
+      A: ["llm2", "llm1"]
+      B: ["llm1", "llm2"]
+
+refine:
+  enabled: true
+  per_task:
+    A: ["llm2", "llm1"]
+    B: ["llm1", "llm2"]
+  always_take_refined: false

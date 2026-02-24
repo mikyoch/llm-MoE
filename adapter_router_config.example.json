@@ -1,0 +1,49 @@
+{
+  "base_model_path": "/models/base_llm",
+  "tokenizer_path": "/models/base_llm",
+  "adapters": [
+    {
+      "adapter_id": "adapter_ac",
+      "adapter_path": "/models/adapters/adapter_ac",
+      "supported_tasks": ["A", "C"],
+      "generation_defaults": {
+        "max_new_tokens": 256,
+        "temperature": 0.2,
+        "do_sample": true
+      }
+    },
+    {
+      "adapter_id": "adapter_bd",
+      "adapter_path": "/models/adapters/adapter_bd",
+      "supported_tasks": ["B", "D"],
+      "generation_defaults": {
+        "max_new_tokens": 256,
+        "temperature": 0.2,
+        "do_sample": true
+      }
+    },
+    {
+      "adapter_id": "adapter_ef",
+      "adapter_path": "/models/adapters/adapter_ef",
+      "supported_tasks": ["E", "F"],
+      "generation_defaults": {
+        "max_new_tokens": 256,
+        "temperature": 0.2,
+        "do_sample": true
+      }
+    }
+  ],
+  "policy": {
+    "task_to_adapters": {
+      "A": ["adapter_ac"],
+      "B": ["adapter_bd"],
+      "C": ["adapter_ac"],
+      "D": ["adapter_bd"],
+      "E": ["adapter_ef"],
+      "F": ["adapter_ef"]
+    },
+    "fallback_adapters": ["adapter_ac"],
+    "confidence_threshold": 0.98,
+    "low_confidence_mode": "same_route"
+  }
+}
